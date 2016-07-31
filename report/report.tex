@@ -1,0 +1,153 @@
+\documentclass[a4paper]{article}
+
+\usepackage[sfdefault]{roboto}
+\usepackage[utf8]{inputenc}
+\usepackage[
+    activate={true,nocompatibility},
+    final,
+    tracking=true,
+    kerning=true,
+    spacing=true,
+    factor=1100,
+    stretch=10,
+    shrink=10
+]{microtype}
+\microtypecontext{spacing=nonfrench}
+\usepackage{tikz-uml}
+\usepackage{blindtext}
+
+\title{On-demand Running Services Orchestration with App~Engine and Google Cloud
+Platform}
+\author{Petr Shevtsov\thanks{petr.shevtsov@gmail.com}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+With varying load it is economically effective to use short-lived computing instances
+and to start such instances only when it is needed. Having done all the work, it
+should stop the running instance or the instance itself should be destroyed by the
+means of the underlying platform. This paper describes different approaches on how to
+get the desired results both — cost effective and flexible to additional necessary
+configuration.
+
+As an example of the short-lived computing instance, we assume a Docker container,
+since it represents a self-contained working unit and requires little to none
+additional configuration. Though, the other non-container environment approaches are
+described as well.
+
+As the underlying platform we are going to describe Google Cloud Platform, and
+especially the use of App~Engine alongside with other cloud solutions from Google.
+
+\section{Naïve approach}
+The initial approach was to start a Kubernetes pod prior to forwarding the HTTP
+request from the user, receive response from the server run inside a Docker
+container, transfer the response back to the user requested it and stop a pod
+\emph{directly inside the web request}.
+
+This leads to at least two issues:
+\begin{itemize}
+    \item One still will be billed for running Container Engine cluster, no matter if
+        there are no running pods.
+    \item Such requests will be dropped by App Engine because they take significant
+        amount of time.
+\end{itemize}
+
+To overcome the first issue, we need to create a cluster first and delete it by the
+end of the request. The final flow becomes very complex (see Figure~\ref{fig:naive})
+and it is hard to customize, maintain and scale.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{umlseqdiag}
+            \umlobject[no ddots]{Browser}
+            \umlobject[no ddots]{App Engine}
+            \umlobject[no ddots]{Container Engine}
+
+            \begin{umlcall}[op=HTTP request, return=HTTP response]{Browser}{App Engine}
+                \begin{umlcall}[op=create a cluster]{App Engine}{Container Engine}
+                \end{umlcall}
+                \begin{umlcall}[op=create a pod]{App Engine}{Container Engine}
+                \end{umlcall}
+                \begin{umlcall}[op=HTTP request, return=HTTP response]{App Engine}{Container Engine}
+                    \begin{umlcallself}[op=process]{Container Engine}
+                    \end{umlcallself}
+                \end{umlcall}
+                \begin{umlcall}[op=delete a cluster]{App Engine}{Container Engine}
+                \end{umlcall}
+            \end{umlcall}
+        \end{umlseqdiag}
+    \end{tikzpicture}
+    \caption{Naïve approach sequence diagram.\label{fig:naive}}
+\end{figure}
+
+The following section describes the way to get rid of long-running App Engine
+requests.
+
+\section{Asynchronous Web-Worker Model}
+A more predictable and scalable architecture is to background the high-latency or
+long-running work in a process separate from the web layer and immediately respond to
+the user’s request with some indicator of work progress.
+
+\begin{figure}
+    \centering
+    \resizebox{\columnwidth}{!}{%
+        \begin{tikzpicture}
+            \begin{umlseqdiag}
+                \umlobject[no ddots]{Browser}
+                \umlobject[no ddots]{App Engine}
+                \umlobject[no ddots]{Worker}
+                \umlobject[no ddots]{Instance}
+
+
+                \begin{umlcall}[op=HTTP request, return=In-progress]{Browser}{App Engine}
+                    \begin{umlcall}[op=Schedule work]{App Engine}{Worker}
+                    \end{umlcall}
+                \end{umlcall}
+
+                \begin{umlcall}[op=Start]{Worker}{Instance}
+                \end{umlcall}
+
+                \begin{umlcall}[op=HTTP request, return=HTTP response]{Worker}{Instance}
+                    \begin{umlcallself}[op=process]{Instance}
+                    \end{umlcallself}
+                \end{umlcall}
+
+                \begin{umlcall}[op=Stop]{Worker}{Instance}
+                \end{umlcall}
+
+                \begin{umlcall}[op=HTTP request, return=In-progress]{Browser}{App Engine}
+                    \begin{umlcallself}[op=Query result]{App Engine}
+                    \end{umlcallself}
+                \end{umlcall}
+
+                \begin{umlcall}[op=HTTP request, return=Completed]{Browser}{App Engine}
+                    \begin{umlcallself}[op=Query result]{App Engine}
+                    \end{umlcallself}
+                \end{umlcall}
+            \end{umlseqdiag}
+        \end{tikzpicture}
+    }
+    \caption{Asynchronous web-worker model.\label{fig:web-worker}}
+\end{figure}
+
+Here, on Figure~\ref{fig:web-worker}, one or more backround services, running
+separate from the web process and not serving web requests, will read items off their
+work queue one by one and do the work asynchronously. The results will be placed in
+local storage (Datastore, Memcache etc\ldots) when finished.
+
+The following sections describe different implementations of \emph{Asynchronous
+web-worker model} on Google Cloud Platform.
+
+\section{App~Engine Flexible Environment} \blindtext
+
+\section{Deployment Manager} \blindtext
+
+\section{Non-container Environment} \blindtext
+
+\section*{Appendix} \subsection*{Cloud Storage Object Change Notification} \blindtext
+
+\end{document}
