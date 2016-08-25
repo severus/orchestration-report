@@ -1,0 +1,3 @@
+service: msgsrv-go
+runtime: go
+vm: true

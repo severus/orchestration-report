@@ -1,0 +1,3 @@
+service: msgsrv-dart
+runtime: custom
+vm: true

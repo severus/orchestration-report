@@ -1,0 +1,3 @@
+name: msgsrv
+dependencies:
+  appengine: ^0.3.0
